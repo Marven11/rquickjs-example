@@ -6,20 +6,22 @@ use rquickjs::{Context, Runtime};
 #[rquickjs::class]
 #[derive(Clone, Trace, JsLifetime)]
 struct MyClass {
-    x: u32,
-    y: u32,
+    #[qjs(skip_trace)]
+    name: &'static str
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
 impl MyClass {
-    #[qjs(constructor)]
-    pub fn new(x: u32, y: u32) -> Self {
-        Self { x, y }
-    }
 
+    pub fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+}
+
+#[rquickjs::methods]
+impl MyClass {
     #[qjs(get)]
-    fn x(&self) -> u32 {
-        self.x
+    fn name(&self) -> String {
+        self.name.to_string()
     }
 }
 
@@ -32,11 +34,11 @@ fn main() {
 
         Class::<MyClass>::define(&global).unwrap();
         // 这里的clone仅增加Rc计数
-        let o = Class::<MyClass>::instance(ctx.clone(), MyClass { x: 114, y: 514 }).unwrap();
+        let o = Class::<MyClass>::instance(ctx.clone(), MyClass { name: "litiansuo" }).unwrap();
         global.set("o", o).unwrap();
 
-        let result: u32 = ctx.eval(r#"
-        o.x
+        let result: String = ctx.eval(r#"
+        o.name
         "#).unwrap();
         dbg!(result);
     })
