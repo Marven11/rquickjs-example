@@ -3,25 +3,33 @@ use rquickjs::class::Trace;
 use rquickjs::{Class, Ctx, JsLifetime, Null, Object, Result, Value};
 use rquickjs::{Context, Runtime};
 
-#[rquickjs::class]
-#[derive(Clone, Trace, JsLifetime)]
-struct MyClass {
-    #[qjs(skip_trace)]
-    name: &'static str
+#[derive(Clone)]
+struct MyOriginalClass<'custom> {
+    name: &'custom str,
 }
 
-impl MyClass {
+#[rquickjs::class]
+#[derive(Clone, Trace)]
+struct MyClass<'js> {
+    #[qjs(skip_trace)]
+    original: MyOriginalClass<'js>,
+}
 
-    pub fn new(name: &'static str) -> Self {
-        Self { name }
+unsafe impl<'js> JsLifetime<'js> for MyClass<'js> {
+    type Changed<'to> = MyClass<'to>;
+}
+
+impl<'js> MyClass<'js> {
+    pub fn new<'custom: 'js>(original: MyOriginalClass<'custom>) -> Self {
+        Self { original }
     }
 }
 
 #[rquickjs::methods]
-impl MyClass {
+impl<'js> MyClass<'js> {
     #[qjs(get)]
     fn name(&self) -> String {
-        self.name.to_string()
+        self.original.name.to_string()
     }
 }
 
@@ -29,17 +37,26 @@ fn main() {
     let runtime = Runtime::new().unwrap();
     let context = Context::full(&runtime).unwrap();
     context.with(|ctx| {
-
         let global = ctx.globals();
 
         Class::<MyClass>::define(&global).unwrap();
         // 这里的clone仅增加Rc计数
-        let o = Class::<MyClass>::instance(ctx.clone(), MyClass { name: "litiansuo" }).unwrap();
+        let o = Class::<MyClass>::instance(
+            ctx.clone(),
+            MyClass {
+                original: MyOriginalClass { name: "litiansuo" },
+            },
+        )
+        .unwrap();
         global.set("o", o).unwrap();
 
-        let result: String = ctx.eval(r#"
+        let result: String = ctx
+            .eval(
+                r#"
         o.name
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         dbg!(result);
     })
 }
