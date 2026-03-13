@@ -1,6 +1,6 @@
 use rquickjs::class::Trace;
 use rquickjs::prelude::Func;
-use rquickjs::{Array, Class, Context, JsLifetime, Runtime, TypedArray};
+use rquickjs::{Array, Class, Context, JsLifetime, Module, Runtime, TypedArray, WriteOptions};
 
 #[derive(Clone)]
 pub struct OriginalQueryParam<'a> {
@@ -141,6 +141,31 @@ impl EvalContext {
             }
 
             ctx.eval(expr)
+        })
+    }
+
+    pub fn compile(&self, expr: &str) -> rquickjs::Result<Vec<u8>> {
+        let wrapped = format!("export default {};", expr);
+        self.context.with(|ctx| {
+            let module = Module::declare(ctx.clone(), "test", wrapped)?;
+            let bytes = module.write(WriteOptions::default())?;
+            Ok(bytes)
+        })
+    }
+
+    pub fn eval_precompiled(&self, req: &OriginalHTTPRequest, bytes: &[u8]) -> rquickjs::Result<bool> {
+        self.context.with(|ctx| {
+            let global = ctx.globals();
+
+            unsafe {
+                let request = HTTPRequest::new(req);
+                let request_static: HTTPRequest<'static> = std::mem::transmute(request);
+                let o = Class::<HTTPRequest>::instance(ctx.clone(), request_static).unwrap();
+                global.set("request", o).unwrap();
+            }
+            let module = unsafe { Module::load(ctx, bytes) }?;
+            let (evaluated, _) = module.eval()?;
+            evaluated.get::<_, bool>("default")
         })
     }
 }

@@ -17,12 +17,11 @@ fn bench_filename_decode(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("quickjs_vs_wirefilter");
 
-    group.bench_with_input("rquickjs", &ctx, |b, ctx| {
+    let bytes = ctx.compile(r#"decode_utf8(request.url_path) == "/shell.php""#).unwrap();
+
+    group.bench_with_input("rquickjs", &(&ctx, &bytes), |b, (ctx, bytes)| {
         b.iter(|| {
-            let result = ctx.eval(
-                black_box(&http_request),
-                black_box(r#"decode_utf8(request.url_path) == "/shell.php""#),
-            );
+            let result = ctx.eval_precompiled(black_box(&http_request), black_box(bytes));
             assert!(matches!(result, Ok(true)));
         })
     });
