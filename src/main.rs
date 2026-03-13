@@ -1,6 +1,5 @@
-use rquickjs::atom::PredefinedAtom;
 use rquickjs::class::Trace;
-use rquickjs::{Class, Ctx, JsLifetime, Null, Object, Result, Value};
+use rquickjs::{Class, JsLifetime};
 use rquickjs::{Context, Runtime};
 
 #[derive(Clone)]
@@ -12,7 +11,7 @@ struct MyOriginalClass<'custom> {
 #[derive(Clone, Trace)]
 struct MyClass<'js> {
     #[qjs(skip_trace)]
-    original: MyOriginalClass<'js>,
+    original: &'js MyOriginalClass<'js>,
 }
 
 unsafe impl<'js> JsLifetime<'js> for MyClass<'js> {
@@ -20,7 +19,7 @@ unsafe impl<'js> JsLifetime<'js> for MyClass<'js> {
 }
 
 impl<'js> MyClass<'js> {
-    pub fn new<'custom: 'js>(original: MyOriginalClass<'custom>) -> Self {
+    pub fn new<'other: 'js>(original: &'js MyOriginalClass<'other>) -> Self {
         Self { original }
     }
 }
@@ -33,30 +32,26 @@ impl<'js> MyClass<'js> {
     }
 }
 
-fn main() {
+fn run<'a, 'b: 'a>(r: &'a MyOriginalClass<'b>) {
+    let a: MyClass<'a> = MyClass { original: r };
     let runtime = Runtime::new().unwrap();
     let context = Context::full(&runtime).unwrap();
+
     context.with(|ctx| {
         let global = ctx.globals();
 
         Class::<MyClass>::define(&global).unwrap();
-        // 这里的clone仅增加Rc计数
-        let o = Class::<MyClass>::instance(
-            ctx.clone(),
-            MyClass {
-                original: MyOriginalClass { name: "litiansuo" },
-            },
-        )
-        .unwrap();
-        global.set("o", o).unwrap();
-
-        let result: String = ctx
-            .eval(
-                r#"
-        o.name
-        "#,
-            )
-            .unwrap();
-        dbg!(result);
+        unsafe {
+            let a = std::mem::transmute::<MyClass<'a>, MyClass<'static>>(a);
+            let o = Class::<MyClass>::instance(ctx.clone(), a).unwrap();
+            global.set("o", o).unwrap();
+            let result: String = ctx.eval(r#"o.name"#).unwrap();
+            dbg!(result);
+        };
     })
+}
+
+fn main() {
+    let original = MyOriginalClass { name: "litiansuo" };
+    run(&original);
 }
