@@ -3,5 +3,12 @@ name = "rquickjs-example"
 version = "0.1.0"
 edition = "2024"
 
+[[bench]]
+name = "compare"
+harness = false
+
 [dependencies]
 rquickjs = { version = "0.11.0", features = [ "macro" ]}
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
